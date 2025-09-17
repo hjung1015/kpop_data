@@ -101,3 +101,4 @@ with st.expander("전체 원본 데이터 보기"):
         data.style.format({"release_date": "{:%Y-%m-%d}"}), # 날짜 형식 동일하게 적용
         hide_index=True,
         use_container_width=True
+    )
