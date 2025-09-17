@@ -4,84 +4,100 @@ import plotly.express as px
 
 # --- 1. 기본 페이지 설정 ---
 st.set_page_config(
-    page_title="실시간 데이터 시각화",
-    page_icon="✍",
+    page_title="인터랙티브 데이터 세상",
+    page_icon="✨",
     layout="wide"
 )
 
-# --- 2. 대시보드 제목 ---
-st.title("실시간 데이터 입력 및 시각화 대시보드")
-st.write("아래 표에 직접 데이터를 입력하거나 수정하면, 오른쪽 차트가 실시간으로 업데이트됩니다.")
-st.info("표의 마지막 빈 줄에 내용을 입력하면 새 행이 추가됩니다", icon="💡")
+# --- 2. 데이터 불러오기 ---
+@st.cache_data
+def load_data(file_path):
+    data = pd.read_csv(file_path)
+    data['release_date'] = pd.to_datetime(data['release_date'])
+    return data
 
-# --- 3. Session State를 활용한 데이터 프레임 초기화 ---
-if 'df' not in st.session_state:
-    initial_data = {
-        "항목": ["사과 🍎", "바나나 🍌", "딸기 🍓", "오렌지 🍊"],
-        "수량": [100, 55, 74, 66]
-    }
-    st.session_state.df = pd.DataFrame(initial_data)
+data = load_data("kpop_albums.csv")
 
+# --- 3. 대시보드 제목과 설명 추가 ---
+st.title("✨ 스트림릿으로 펼치는 인터랙티브 데이터 세상")
+st.write("(클릭, 선택, 입력! 나만의 대시보드를 만들고 체험하기)")
+st.write("---")
 
-# --- 4. 화면 레이아웃 구성 ---
-col1, col2 = st.columns([0.8,1.2])
+# --- 4. 인터랙티브 위젯 (사이드바) ---
+st.sidebar.header("아티스트를 선택하세요")
+artist_list = sorted(data['artist'].unique())
+selected_artist = st.sidebar.selectbox(
+    "보고 싶은 아티스트는?",
+    artist_list
+)
 
+# --- 5. 선택에 따른 데이터 필터링 ---
+filtered_data = data[data['artist'] == selected_artist]
 
-# --- 5. 데이터 입력 영역 (왼쪽 컬럼) ---
+# --- 6. 데이터 시각화 (한 그룹 분석) ---
+st.header(f"💽 {selected_artist} 앨범 판매량 분석")
+col1, col2 = st.columns([1, 2])
+
 with col1:
-    st.header("데이터 입력")
-    #에디터 사용을 통해 수정 가능하도록 설정
-    #dynamic => 추가, 수정 등 자유롭게 설정
-  
-    edited_df = st.data_editor(
-        st.session_state.df,
-        num_rows="dynamic",
-        key="data_editor",
+    st.subheader("앨범 정보")
+    st.dataframe(
+        filtered_data[['release_date', 'album_title', 'sales']]
+        .sort_values(by='release_date')
+        .style.format({
+            "release_date": "{:%Y-%m-%d}",  # 날짜 형식을 '연-월-일'로 깔끔하게 변경
+            "sales": "{:,}장"              # 판매량에 천 단위 콤마와 '장'을 붙임
+        }),
+        hide_index=True,
         use_container_width=True
     )
 
-
-# --- 6. 실시간 시각화 영역 (오른쪽 컬럼) ---
 with col2:
-    st.header("실시간 시각화")
-
-    # 추가된 부분: 그래프 선택 기능
-    chart_type = st.selectbox(
-        "보고 싶은 그래프를 선택하세요:",
-        ["막대그래프", "파이그래프", "꺾은선그래프", "영역그래프"]
+    st.subheader("앨범별 판매량 그래프")
+    fig_bar = px.bar(
+        filtered_data.sort_values(by='release_date'),
+        x='album_title',
+        y='sales',
+        labels={'album_title': '앨범 제목', 'sales': '판매량 (단위: 장)'},
+        color='album_title'
     )
+    fig_bar.update_layout(yaxis_tickformat=',', showlegend=False)
+    st.plotly_chart(fig_bar, use_container_width=True)
 
-    if not edited_df.empty:
-        try:
-            # 수정된 부분: 선택에 따라 다른 그래프를 그림
-            if chart_type == "막대그래프":
-                fig = px.bar(
-                    edited_df, x="항목", y="수량", title="항목별 수량",
-                    color="항목", template="plotly_white"
-                )
-            elif chart_type == "파이그래프":
-                fig = px.pie(
-                    edited_df, names="항목", values="수량", title="항목별 비율",
-                    hole=0.3 # 도넛 모양으로 만들기
-                )
-            elif chart_type == "꺾은선그래프":
-                fig = px.line(
-                    edited_df, x="항목", y="수량", title="항목별 수량 추이",
-                    markers=True, # 데이터 지점에 점 표시
-                    template="plotly_white"
-                )
-            elif chart_type == "영역그래프":
-                fig = px.area(
-                    edited_df, x="항목", y="수량", title="항목별 수량 영역",
-                    markers=True, template="plotly_white"
-                )
+st.write("---")
 
-            fig.update_layout(yaxis_title="수량", xaxis_title="항목")
-            st.plotly_chart(fig, use_container_width=True)
+# --- 7. 라이벌 그룹 비교 분석 기능 ---
+st.header("⚔️ 라이벌 그룹 비교 분석")
 
-        except Exception as e:
-            st.error(f"차트를 그리는 중 오류가 발생했습니다: {e}")
-            st.warning("차트를 그리려면 '항목'과 '수량' 컬럼이 필요하며, '수량' 컬럼은 숫자여야 합니다.")
-    else:
-        st.info("데이터를 입력하면 차트가 여기에 표시됩니다.")
+selected_rivals = st.multiselect(
+    '비교하고 싶은 아티스트를 2팀 이상 선택하세요.',
+    artist_list,
+    default=["에스파", "아이브"]
+)
 
+if len(selected_rivals) >= 2:
+    rival_data = data[data['artist'].isin(selected_rivals)]
+    st.subheader("앨범 발매일 기준 판매량 추이 비교")
+    fig_line = px.line(
+        rival_data.sort_values(by='release_date'),
+        x='release_date',
+        y='sales',
+        color='artist',
+        markers=True,
+        hover_name='album_title',
+        labels={
+            'release_date': '발매일',
+            'sales': '판매량 (단위: 장)',
+            'artist': '아티스트'
+        }
+    )
+    fig_line.update_layout(yaxis_tickformat=',')
+    st.plotly_chart(fig_line, use_container_width=True)
+else:
+    st.info("그래프를 보려면 비교할 아티스트를 2팀 이상 선택해주세요.")
+
+# --- 8. 전체 데이터 보여주기 ---
+with st.expander("전체 원본 데이터 보기"):
+    st.dataframe(
+        data.style.format({"release_date": "{:%Y-%m-%d}"}), # 날짜 형식 동일하게 적용
+        hide_index=True,
+        use_container_width=True
